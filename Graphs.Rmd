@@ -1,0 +1,39 @@
+---
+title: "DaSPPA product graphs"
+subtitle: "This document will generate the requisite graphs and data analysis"
+date: "2023-12-01"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, echo = FALSE, warning = FALSE)
+```
+
+
+```{r, echo=TRUE}
+library(tidyverse) 
+library(reshape2)
+library(dplyr)
+library(ggrepel)
+library(datawizard)
+library(knitr) 
+library(kableExtra)  
+library(sf)
+library(stringi)
+library(mapproj)
+
+set.seed(25536)
+```
+
+```{r}
+
+
+```
+
+
+
+
+
+
