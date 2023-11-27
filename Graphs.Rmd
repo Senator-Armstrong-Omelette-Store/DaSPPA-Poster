@@ -27,9 +27,12 @@ library(mapproj)
 set.seed(25536)
 ```
 
+### Data Preprocessing
 ```{r}
+unvotes <- read.csv("data/dataverse_files/UNVotes.csv")
+idealpointestimates <- read.csv("data/dataverse_files/IdealpointestimatesAll_Jul2023.csv")
 
-
+#un_vote_data <- unvotes |> select(Country, ccode, )
 ```
 
 
