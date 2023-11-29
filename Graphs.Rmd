@@ -20,9 +20,15 @@ library(ggrepel)
 library(datawizard)
 library(knitr) 
 library(kableExtra)  
+library(rnaturalearth)
 library(sf)
 library(stringi)
 library(mapproj)
+library(factoextra)
+library(cluster)
+library(klaR)
+library(maps)
+library(passport)
 
 set.seed(25536)
 ```
@@ -32,8 +38,115 @@ set.seed(25536)
 unvotes <- read.csv("data/dataverse_files/UNVotes.csv")
 idealpointestimates <- read.csv("data/dataverse_files/IdealpointestimatesAll_Jul2023.csv")
 
-#un_vote_data <- unvotes |> select(Country, ccode, )
+#unvotes$date <- as.Date(unvotes$date)
+
+un_vote_data <- unvotes |>
+  dplyr::mutate(date = as.Date(date, format="%Y-%m-%d")) |> 
+  dplyr::select(Country, date, resid, vote, importantvote, me, nu, di, hr, co, ec) |>
+  dplyr::filter(date >= as.Date("2000-01-01", format="%Y-%m-%d"))
+
+
+
 ```
+
+
+#### Pre-Training analysis
+Using Elbow method and gap statistic, we aim to find the optimal cluster gap.
+```{r, eval = FALSE}
+gc()
+
+df <- un_vote_data |> 
+  dplyr::filter(ec == 1) |> 
+  dplyr::select(Country, resid, vote, importantvote)
+
+df <- na.omit(df)
+
+dfm <- scale(df2 |> dplyr::select(resid, vote, importantvote))
+
+fviz_nbclust(dfm, kmeans, method = "wss") +
+      geom_vline(xintercept = 3, linetype = 2)+
+      labs(subtitle = "Elbow method")
+
+gc()
+
+gap_stat <- clusGap(dfm, FUN = kmeans, nstart = 25, K.max = 10, B = 50)
+fviz_gap_stat(gap_stat)
+gc()
+```
+Lets use k=7 as it is a good compromise.
+
+#### Fitting the k means model.
+```{r}
+k <- 7
+gc()
+
+df <- un_vote_data |> filter(importantvote == 1)
+dfm <-na.omit(df)
+
+data <- dfm |> dplyr::select(Country, resid, vote)
+data_transposed <- data %>%
+  spread(key = resid, value = vote)
+
+dfm <-na.omit(data_transposed)
+dfm2 <- dfm[, -1]
+
+
+km.res <- kmeans(dfm2, centers = 7, nstart = 1000) 
+fviz_cluster(km.res, data=dfm2, ellipse.type = "norm")
+
+#km.res['Country']=labels
+world2E <- ne_countries(scale="medium", returnclass = "sf")
+world2E <- st_make_valid(world2E)
+world2E <- st_simplify(world2E, dTolerance = 100)
+#wrd <- world2E |> dplyr::mutate(Country = as_country_code(geounit, from="en",to = "iso3c"))
+
+wrd <- world2E |> dplyr::mutate(Country = iso_a3)
+
+```
+
+```{r}
+
+dfm['cluster']= km.res$cluster
+
+
+wrdonly <- anti_join(wrd, dfm, by = "Country")
+summary_1 <- wrdonly |> 
+  dplyr::group_by(Country) |> 
+  dplyr::summarize(count = n()) 
+
+unvotesonly <- anti_join(dfm, wrd, by = "Country")
+summary_2 <- unvotesonly |> 
+  dplyr::group_by(Country) |> 
+  dplyr::summarize(count= n()) 
+
+summary_1
+summary_2
+
+country_group <- dfm |> dplyr::select(Country, cluster)
+
+
+combined <- inner_join(country_group, wrd, by = "Country")
+
+
+combined |> ggplot(aes(fill=cluster)) +
+  geom_sf(aes(geometry=geometry)) +
+  coord_sf() +
+  labs(x=NULL, y=NULL, fill="UN Vote Alliances.") +
+  guides(x = "none", y = "none") 
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
