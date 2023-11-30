@@ -29,6 +29,8 @@ library(cluster)
 library(klaR)
 library(maps)
 library(passport)
+library(tidytext)
+library(textdata)
 
 set.seed(25536)
 ```
@@ -135,6 +137,85 @@ combined |> ggplot(aes(fill=cluster)) +
   guides(x = "none", y = "none") 
 
 ```
+
+
+### Part 2: Graph Network Analysis
+
+
+
+### Part 3: Sentiment Analysis and Regression.
+```{r}
+presscon <- readxl::read_xlsx("data/Sentiment/CMFA_PressCon_v3.xlsx")
+
+press_select <- presscon |> dplyr::select(question_lem, answer_lem, q_loc, a_loc)
+
+```
+
+
+
+
+```{r}
+# Assuming your dataframe is named 'df' and has columns A and B
+# Load a sentiment lexicon (e.g., AFINN) for sentiment analysis
+afinn <- get_sentiments("afinn")
+
+# Function to calculate sentiment for a row
+calculate_row_sentiment <- function(row) {
+  sentiment_question <- row %>%
+    dplyr::select(question_lem) %>%
+    unnest_tokens(word, question_lem) %>%
+    inner_join(afinn) %>%
+    summarize(sentiment_question = sum(value))
+
+  sentiment_answer <- row %>%
+    dplyr::select(answer_lem) %>%
+    unnest_tokens(word, answer_lem) %>%
+    inner_join(afinn) %>%
+    summarize(sentiment_answer = sum(value))
+
+  overall_sentiment <- case_when(
+    sentiment_question$sentiment_question >= 0 ~ sentiment_answer$sentiment_answer,
+    sentiment_question$sentiment_question < 0 ~ sentiment_answer$sentiment_answer
+  )
+
+  return(cbind(row, sentiment_question, sentiment_answer, overall_sentiment))
+}
+
+# Apply the function row-wise to the dataframe
+sentiment_speech <- press_select %>%
+  group_by(row_number()) %>%
+  do(calculate_row_sentiment(.))
+```
+
+
+```{r}
+# TODO: Process countries mentioned: if countries appear in A and B locations
+
+
+
+
+# TODO: Now, convert positive/negative into a scale of -1,0,1.
+
+
+
+
+```
+
+
+```{r}
+# TODO: Calculate absolute distance between pairs of countries.
+# Using idealpointestimates, use IdealPointAll to calculate the ideal point difference (absolute value) for every pair of countries.
+
+
+# TODO: Use logistic regression, map 
+
+
+```
+
+
+
+
+
 
 
 
