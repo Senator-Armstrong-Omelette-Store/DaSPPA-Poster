@@ -31,6 +31,7 @@ library(maps)
 library(passport)
 library(tidytext)
 library(textdata)
+library(purrr)
 
 set.seed(25536)
 ```
@@ -175,7 +176,7 @@ calculate_row_sentiment <- function(row) {
 
   overall_sentiment <- case_when(
     sentiment_question$sentiment_question >= 0 ~ sentiment_answer$sentiment_answer,
-    sentiment_question$sentiment_question < 0 ~ sentiment_answer$sentiment_answer
+    sentiment_question$sentiment_question < 0 ~ -sentiment_answer$sentiment_answer
   )
 
   return(cbind(row, sentiment_question, sentiment_answer, overall_sentiment))
@@ -190,14 +191,45 @@ sentiment_speech <- press_select %>%
 
 ```{r}
 # TODO: Process countries mentioned: if countries appear in A and B locations
+sentiment_speech <- sentiment_speech |> mutate(qloctrim = lapply(strsplit(q_loc, ";"), function(x) trimws(x))
+) 
+
+sentiment_speech <- sentiment_speech |> mutate(aloctrim = lapply(strsplit(a_loc, ";"), function(x) trimws(x))
+) 
+
+sentiment_speech <- sentiment_speech |> mutate(qloctrim =
+  if_else(!is.vector(qloctrim), c(qloctrim), qloctrim)
+) 
 
 
+sentiment_speech <- sentiment_speech |> mutate(aloctrim =
+  if_else(!is.vector(aloctrim), c(aloctrim), aloctrim)
+) 
 
+sentiment_speech <- sentiment_speech |> mutate(countries = pmap(list(qloctrim, aloctrim), intersect))
 
-# TODO: Now, convert positive/negative into a scale of -1,0,1.
+append_sentiment <- function(clist, sentiment) {
+  data.frame(target_country = clist, overall_sentiment = sentiment)
+}
 
+sentiment_china_to_country <- sentiment_speech |> 
+  dplyr::select(countries, overall_sentiment) |>
+  unnest(countries) |>
+  filter(!countries %in% c("China", "-"))
 
+# TODO: Now, group and calculate average sentiment.
+sentiment_china_grouped <- sentiment_china_to_country |>
+  dplyr::select(countries, overall_sentiment) |>
+  group_by(countries) |>
+  summarize(avg_sentiment = mean(overall_sentiment))
 
+sentiments_final <- sentiment_china_grouped |> 
+  mutate(iso3c = as_country_code(countries, from="en",to = "iso3c")) |>
+  group_by(iso3c) |>
+  summarize(avg_sentiment = mean(avg_sentiment))
+           
+
+# TODO: NOTE: Limitations section for Nisaar: some records are coded as Peoples Republic of Vietnam, Republic of india, etc. Some other places are coded wrong. Very hard to recode everything. Missing out on some sentiment relevant speeches.
 
 ```
 
@@ -205,11 +237,34 @@ sentiment_speech <- press_select %>%
 ```{r}
 # TODO: Calculate absolute distance between pairs of countries.
 # Using idealpointestimates, use IdealPointAll to calculate the ideal point difference (absolute value) for every pair of countries.
+# Use most recent session in the UN.
+current_ideals_countries <- idealpointestimates |>
+  filter(session ==77)
 
+relevant_ideals <- current_ideals_countries |>
+  dplyr::select(iso3c, IdealPointAll)
 
-# TODO: Use logistic regression, map 
+china_row <- relevant_ideals |> filter(iso3c == "CHN")
 
+china_paired_sentiments <- relevant_ideals |>
+  filter(iso3c != "CHN") |>
+  mutate(IdealAbsDiff = abs(IdealPointAll - china_row$IdealPointAll))
 
+# Final Step Conduct Join the data, and run regression line with x=UNIdeal y=sentiment
+joined <- inner_join(china_paired_sentiments, sentiments_final, "iso3c") |>
+  dplyr::select(IdealAbsDiff, avg_sentiment) 
+
+j2 <- joined |>
+  scale()
+
+jd <- as.data.frame(j2)
+
+model <- lm(avg_sentiment ~ IdealAbsDiff, data = jd)
+summary(model)
+
+jd |> ggplot(aes(IdealAbsDiff, avg_sentiment)) +
+  geom_point() +
+  geom_smooth(method='lm') 
 ```
 
 
