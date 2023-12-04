@@ -254,6 +254,8 @@ china_paired_sentiments <- relevant_ideals |>
 joined <- inner_join(china_paired_sentiments, sentiments_final, "iso3c") |>
   dplyr::select(IdealAbsDiff, avg_sentiment) 
 
+# Data has been normalized.
+
 j2 <- joined |>
   scale()
 
