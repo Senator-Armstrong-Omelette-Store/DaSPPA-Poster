@@ -21,6 +21,7 @@ library(datawizard)
 library(knitr) 
 library(kableExtra)  
 library(rnaturalearth)
+library(rnaturalearthdata)
 library(sf)
 library(stringi)
 library(mapproj)
@@ -54,33 +55,41 @@ un_vote_data <- unvotes |>
 
 
 #### Pre-Training analysis
-Using Elbow method and gap statistic, we aim to find the optimal cluster gap.
-```{r, eval = FALSE}
+Using Elbow method and gap statistic, we aim to find the optimal cluster gap. 
+
+There are elbows at 3 and 5. Gap statistic analysis shows 8 is optimal, but 5 is a local turning point as well. Thus, we can use 5.
+```{r}
+#optional: eval=FALSE
 gc()
 
-df <- un_vote_data |> 
-  dplyr::filter(ec == 1) |> 
-  dplyr::select(Country, resid, vote, importantvote)
+df <- un_vote_data |> filter(importantvote == 1)
+dfm <-na.omit(df)
 
-df <- na.omit(df)
+data <- dfm |> dplyr::select(Country, resid, vote)
+data_transposed <- data %>%
+  spread(key = resid, value = vote)
 
-dfm <- scale(df2 |> dplyr::select(resid, vote, importantvote))
+dfm <-na.omit(data_transposed)
+dfm2 <- dfm[, -1]
 
-fviz_nbclust(dfm, kmeans, method = "wss") +
+fviz_nbclust(dfm2, kmeans, method = "wss") +
       geom_vline(xintercept = 3, linetype = 2)+
       labs(subtitle = "Elbow method")
 
 gc()
 
-gap_stat <- clusGap(dfm, FUN = kmeans, nstart = 25, K.max = 10, B = 50)
+gap_stat <- clusGap(dfm2, FUN = kmeans, nstart = 25, K.max = 10, B = 50)
 fviz_gap_stat(gap_stat)
 gc()
 ```
+
 Lets use k=5 as it is a good compromise.
+Why 5 clusters? 5 UNSC superpowers.
 
 #### Fitting the k means model.
 ```{r}
 k <- 5
+
 gc()
 
 df <- un_vote_data |> filter(importantvote == 1)
@@ -94,8 +103,16 @@ dfm <-na.omit(data_transposed)
 dfm2 <- dfm[, -1]
 
 
-km.res <- kmeans(dfm2, centers = 5, nstart = 1000) 
-fviz_cluster(km.res, data=dfm2, ellipse.type = "norm")
+
+
+km.res <- kmeans(dfm2, centers = k, nstart = 1000) 
+fviz_cluster(km.res, data=dfm2)
+
+km.res <- kmeans(dfm2, centers = k, nstart = 1000) 
+fviz_cluster(km.res, data=dfm2)
+
+sf::sf_use_s2(FALSE) 
+
 
 #km.res['Country']=labels
 world2E <- ne_countries(scale="medium", returnclass = "sf")
@@ -103,7 +120,8 @@ world2E <- ne_countries(scale="medium", returnclass = "sf")
 #world2E <- st_simplify(world2E, dTolerance = 100)
 #wrd <- world2E |> dplyr::mutate(Country = as_country_code(geounit, from="en",to = "iso3c"))
 
-wrd <- world2E |> dplyr::mutate(Country = iso_a3)
+wrd <- world2E |> 
+  dplyr::mutate(Country = iso_a3)
 
 ```
 
@@ -133,15 +151,18 @@ combined <- right_join(country_group, wrd, by = "Country")
 combined <- combined |> mutate(cluster = as.character(cluster))
 
 
+
 combined |> ggplot(aes(fill=cluster)) +
   geom_sf(aes(geometry=geometry)) +
   coord_sf() +
+
   guides(x = "none", y = "none") +
   labs(title = "Map: K Means grouping of UN Voting Alignment Groups",
     subtitle = "Model: k = 5, aligned on voting Yes/No/Abstain for every resolution",
     caption = "Using UN Votes Data.",
     x=NULL, y=NULL, fill="Alignment"
   ) 
+
 ```
 
 
@@ -289,10 +310,12 @@ jd |> ggplot(aes(IdealAbsDiff, avg_sentiment)) +
 
 
 
+### Part 2: Graph Network Analysis
 
 
+### Part 3: Regression and Sentiment Analysis
 
-
+We carry out sentiment analysis on the statements of Q&As of Chinese Ministry of Foreign affairs 
 
 
 
