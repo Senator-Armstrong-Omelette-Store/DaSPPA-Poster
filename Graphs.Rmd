@@ -82,6 +82,8 @@ gap_stat <- clusGap(dfm2, FUN = kmeans, nstart = 25, K.max = 10, B = 50)
 fviz_gap_stat(gap_stat)
 gc()
 ```
+
+Lets use k=5 as it is a good compromise.
 Why 5 clusters? 5 UNSC superpowers.
 
 #### Fitting the k means model.
@@ -101,6 +103,8 @@ dfm <-na.omit(data_transposed)
 dfm2 <- dfm[, -1]
 
 
+
+
 km.res <- kmeans(dfm2, centers = k, nstart = 1000) 
 fviz_cluster(km.res, data=dfm2)
 
@@ -108,6 +112,7 @@ km.res <- kmeans(dfm2, centers = k, nstart = 1000)
 fviz_cluster(km.res, data=dfm2)
 
 sf::sf_use_s2(FALSE) 
+
 
 #km.res['Country']=labels
 world2E <- ne_countries(scale="medium", returnclass = "sf")
@@ -143,12 +148,20 @@ country_group <- dfm |> dplyr::select(Country, cluster)
 
 combined <- right_join(country_group, wrd, by = "Country")
 
+combined <- combined |> mutate(cluster = as.character(cluster))
+
+
 
 combined |> ggplot(aes(fill=cluster)) +
   geom_sf(aes(geometry=geometry)) +
   coord_sf() +
-  labs(x=NULL, y=NULL, fill="UN Vote Alliance Clustering using K-Means") +
-  guides(x = "none", y = "none") 
+
+  guides(x = "none", y = "none") +
+  labs(title = "Map: K Means grouping of UN Voting Alignment Groups",
+    subtitle = "Model: k = 5, aligned on voting Yes/No/Abstain for every resolution",
+    caption = "Using UN Votes Data.",
+    x=NULL, y=NULL, fill="Alignment"
+  ) 
 
 ```
 
@@ -279,7 +292,14 @@ summary(model)
 
 jd |> ggplot(aes(IdealAbsDiff, avg_sentiment)) +
   geom_point() +
-  geom_smooth(method='lm') 
+  geom_smooth(method='lm') +
+  labs(
+    title = "Regression: UN Vote Alignment on Sentiment for pther countries with China",
+    subtitle = "Model: OLS - Sentiment ~ IdealDifference",
+    caption = "Using UN Votes and China MFA Press Release Data.",
+    x = "UN Voting Ideals Absolute Difference",
+    y = "Average Sentiment of China"
+  )
 ```
 
 
