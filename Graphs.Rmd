@@ -76,11 +76,11 @@ gap_stat <- clusGap(dfm, FUN = kmeans, nstart = 25, K.max = 10, B = 50)
 fviz_gap_stat(gap_stat)
 gc()
 ```
-Lets use k=7 as it is a good compromise.
+Lets use k=5 as it is a good compromise.
 
 #### Fitting the k means model.
 ```{r}
-k <- 7
+k <- 5
 gc()
 
 df <- un_vote_data |> filter(importantvote == 1)
@@ -94,13 +94,13 @@ dfm <-na.omit(data_transposed)
 dfm2 <- dfm[, -1]
 
 
-km.res <- kmeans(dfm2, centers = 7, nstart = 1000) 
+km.res <- kmeans(dfm2, centers = 5, nstart = 1000) 
 fviz_cluster(km.res, data=dfm2, ellipse.type = "norm")
 
 #km.res['Country']=labels
 world2E <- ne_countries(scale="medium", returnclass = "sf")
-world2E <- st_make_valid(world2E)
-world2E <- st_simplify(world2E, dTolerance = 100)
+#world2E <- st_make_valid(world2E)
+#world2E <- st_simplify(world2E, dTolerance = 100)
 #wrd <- world2E |> dplyr::mutate(Country = as_country_code(geounit, from="en",to = "iso3c"))
 
 wrd <- world2E |> dplyr::mutate(Country = iso_a3)
@@ -128,15 +128,20 @@ summary_2
 country_group <- dfm |> dplyr::select(Country, cluster)
 
 
-combined <- inner_join(country_group, wrd, by = "Country")
+combined <- right_join(country_group, wrd, by = "Country")
+
+combined <- combined |> mutate(cluster = as.character(cluster))
 
 
 combined |> ggplot(aes(fill=cluster)) +
   geom_sf(aes(geometry=geometry)) +
   coord_sf() +
-  labs(x=NULL, y=NULL, fill="UN Vote Alliances.") +
-  guides(x = "none", y = "none") 
-
+  guides(x = "none", y = "none") +
+  labs(title = "Map: K Means grouping of UN Voting Alignment Groups",
+    subtitle = "Model: k = 5, aligned on voting Yes/No/Abstain for every resolution",
+    caption = "Using UN Votes Data.",
+    x=NULL, y=NULL, fill="Alignment"
+  ) 
 ```
 
 
@@ -266,7 +271,14 @@ summary(model)
 
 jd |> ggplot(aes(IdealAbsDiff, avg_sentiment)) +
   geom_point() +
-  geom_smooth(method='lm') 
+  geom_smooth(method='lm') +
+  labs(
+    title = "Regression: UN Vote Alignment on Sentiment for pther countries with China",
+    subtitle = "Model: OLS - Sentiment ~ IdealDifference",
+    caption = "Using UN Votes and China MFA Press Release Data.",
+    x = "UN Voting Ideals Absolute Difference",
+    y = "Average Sentiment of China"
+  )
 ```
 
 
