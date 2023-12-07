@@ -11,6 +11,7 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, echo = FALSE, warning = FALSE)
 ```
 
+Disclaimer: This project used Generative AI (like ChatGPT) to generate some code snippets, which were adapted to release the output we desired.
 
 ```{r, echo=TRUE}
 library(tidyverse) 
@@ -33,6 +34,13 @@ library(passport)
 library(tidytext)
 library(textdata)
 library(purrr)
+library(countrycode)
+library(igraph)
+library(ggraph)
+library(tidygraph)
+library(ggstance)
+library(patchwork)
+library(stargazer)
 
 set.seed(25536)
 ```
@@ -88,6 +96,7 @@ Why 5 clusters? 5 UNSC superpowers.
 
 #### Fitting the k means model.
 ```{r}
+set.seed(4201)
 k <- 5
 
 gc()
@@ -253,7 +262,8 @@ sentiments_final <- sentiment_china_grouped |>
   mutate(iso3c = as_country_code(countries, from="en",to = "iso3c")) |>
   group_by(iso3c) |>
   summarize(avg_sentiment = mean(avg_sentiment))
-           
+
+
 
 # TODO: NOTE: Limitations section for Nisaar: some records are coded as Peoples Republic of Vietnam, Republic of india, etc. Some other places are coded wrong. Very hard to recode everything. Missing out on some sentiment relevant speeches.
 
@@ -300,22 +310,268 @@ jd |> ggplot(aes(IdealAbsDiff, avg_sentiment)) +
     x = "UN Voting Ideals Absolute Difference",
     y = "Average Sentiment of China"
   )
+
+#sttb <- stargazer(model, type="text")
+#sttb
+
 ```
 
 
+Table Of Top and Bottom 5 sentiments for china
+```{r}
+top_sentiment <- sentiments_final |>
+  arrange(desc(avg_sentiment)) 
 
 
+top5 <- head(top_sentiment, 5) |>
+  mutate(name = as_country_code(iso3c, from="iso3c",to = "en"))
 
+bottom5 <- tail(top_sentiment, 5)|>
+  mutate(name = as_country_code(iso3c, from="iso3c",to = "en"))
 
+# Create separate tables for top and bottom 5 rows
+table_top <- kable(top5, format = "html", escape = FALSE) |>
+  kable_styling(full_width = FALSE, position = "center") |>
+  add_header_above(c("Top 5 Sentiment Countries for China" = 3))
 
+table_bottom <- kable(bottom5, format = "html", escape = FALSE) |>
+  kable_styling(full_width = FALSE, position = "center") |>
+  add_header_above(c("Bottom 5 Sentiment Countries for China" = 3))
+
+# Print or display the tables
+print(table_top)
+print(table_bottom)
+
+#kable(top_sentiment, format = "html", escape = FALSE) |>
+  #kable_styling(full_width = FALSE)
+           
+```
 
 
 ### Part 2: Graph Network Analysis
 
+```{r}
 
-### Part 3: Regression and Sentiment Analysis
+ideal_wavg <- idealpointestimates |>
+  dplyr::select(iso3c, IdealPointAll, NVotesAll) |>
+  group_by(iso3c) |>
+  summarise(avg_ideals = weighted.mean(IdealPointAll, w=NVotesAll))
 
-We carry out sentiment analysis on the statements of Q&As of Chinese Ministry of Foreign affairs 
+cccode_ideal_dyads <- expand.grid(ccode1 = ideal_wavg$iso3c, ccode2 = ideal_wavg$iso3c)
+
+cccode_ideal_dyads <- cccode_ideal_dyads |>
+  filter(ccode1 != ccode2)
+
+ccode_dyad_ideals <- merge(cccode_ideal_dyads, ideal_wavg, by.x = "ccode1", by.y = "iso3c")
+ccode_dyad_ideals <- merge(ccode_dyad_ideals, ideal_wavg, by.x ="ccode2", by.y ="iso3c", suffixes = c(".c1", ".c2"))
+
+ccode_dyad_ideals$abs_diff_ideals <- abs(ccode_dyad_ideals$avg_ideals.c1 - ccode_dyad_ideals$avg_ideals.c2)
+
+ccode_dyads_unsc_big5 <- ccode_dyad_ideals |>
+  filter(ccode2 %in% c("USA", "FRA", "CHN", "RUS", "GBR"))
+
+```
+
+Top 5 allies of UNSC states by alignment
+```{r}
+k <- 5
+
+dyad_chn <- ccode_dyads_unsc_big5 |>
+  filter(ccode2 == "CHN") |>
+  arrange(abs_diff_ideals) |>
+  slice_head(n = k) |>
+  rename( "Country_A" = ccode2 ,  "Country_B" = ccode1 ) |>
+  dplyr::select(Country_A, Country_B, abs_diff_ideals)
+  
+dyad_gbr <- ccode_dyads_unsc_big5 |>
+  filter(ccode2 == "GBR") |>
+  arrange(abs_diff_ideals) |>
+  slice_head(n = k) |>
+  rename( "Country_A" = ccode2 ,  "Country_B" = ccode1 ) |>
+  dplyr::select(Country_A, Country_B, abs_diff_ideals)
+
+dyad_usa <- ccode_dyads_unsc_big5 |>
+  filter(ccode2 == "USA") |>
+  arrange(abs_diff_ideals) |>
+  slice_head(n = k) |>
+  rename( "Country_A" = ccode2 ,  "Country_B" = ccode1 ) |>
+  dplyr::select(Country_A, Country_B, abs_diff_ideals)
+
+dyad_fra <- ccode_dyads_unsc_big5 |>
+  filter(ccode2 == "FRA") |>
+  arrange(abs_diff_ideals) |>
+  slice_head(n = k) |>
+  rename( "Country_A" = ccode2 ,  "Country_B" = ccode1 ) |>
+  dplyr::select(Country_A, Country_B, abs_diff_ideals)
+
+dyad_rus <- ccode_dyads_unsc_big5 |>
+  filter(ccode2 == "RUS") |>
+  arrange(abs_diff_ideals) |>
+  slice_head(n = k) |>
+  rename( "Country_A" = ccode2 ,  "Country_B" = ccode1 ) |>
+  dplyr::select(Country_A, Country_B, abs_diff_ideals)
+
+
+
+
+```
+
+
+```{r}
+chndat <- dyad_chn |> select(Country_B, abs_diff_ideals) |>   
+  mutate(name =countrycode(Country_B, origin = "iso3c", destination = "country.name")) |> 
+  rename("Ideological_Difference" = abs_diff_ideals) |>
+  select(name, Ideological_Difference)
+
+table_chn <- kable(chndat, format = "html", escape = FALSE) |>
+  kable_styling(full_width = FALSE, position = "center") |>
+  add_header_above(c("Top 5 Idealologically Aligned Countries with China" = 2))
+
+table_chn
+
+
+gbrdat <- dyad_gbr |> select(Country_B, abs_diff_ideals) |>   
+  mutate(name =countrycode(Country_B, origin = "iso3c", destination = "country.name")) |> 
+  rename("Ideological_Difference" = abs_diff_ideals) |>
+  select(name, Ideological_Difference)
+
+table_gbr <- kable(gbrdat, format = "html", escape = FALSE) |>
+  kable_styling(full_width = FALSE, position = "center") |>
+  add_header_above(c("Top 5 Idealologically Aligned Countries with the United Kingdom" = 2))
+
+table_gbr
+
+
+fradat <- dyad_fra |> select(Country_B, abs_diff_ideals) |>   
+  mutate(name =countrycode(Country_B, origin = "iso3c", destination = "country.name")) |> 
+  rename("Ideological_Difference" = abs_diff_ideals) |>
+  select(name, Ideological_Difference)
+
+table_fra <- kable(fradat, format = "html", escape = FALSE) |>
+  kable_styling(full_width = FALSE, position = "center") |>
+  add_header_above(c("Top 5 Idealologically Aligned Countries with France" = 2))
+
+table_fra
+
+
+rusdat <- dyad_rus |> select(Country_B, abs_diff_ideals) |>   
+  mutate(name =countrycode(Country_B, origin = "iso3c", destination = "country.name")) |> 
+  rename("Ideological_Difference" = abs_diff_ideals) |>
+  select(name, Ideological_Difference)
+
+table_rus <- kable(rusdat, format = "html", escape = FALSE) |>
+  kable_styling(full_width = FALSE, position = "center") |>
+  add_header_above(c("Top 5 Idealologically Aligned Countries with Russia" = 2))
+
+table_rus
+
+
+usadat <- dyad_usa |> select(Country_B, abs_diff_ideals) |>   
+  mutate(name =countrycode(Country_B, origin = "iso3c", destination = "country.name")) |> 
+  rename("Ideological_Difference" = abs_diff_ideals) |>
+  select(name, Ideological_Difference)
+
+table_usa <- kable(usadat, format = "html", escape = FALSE) |>
+  kable_styling(full_width = FALSE, position = "center") |>
+  add_header_above(c("Top 5 Idealologically Aligned Countries with the United States" = 2))
+
+table_usa
+
+```
+
+
+
+```{r}
+recombinants <- bind_rows(dyad_chn, dyad_fra, dyad_gbr, dyad_rus, dyad_usa)
+
+recombinant_countries <- recombinants |>
+  dplyr::select(Country_B) |>
+  distinct(Country_B)
+
+recombinant_dyads <- expand.grid(Country_A_2 = recombinant_countries$Country_B, Country_B_2 = recombinant_countries$Country_B)
+
+recombinant_dyads <- recombinant_dyads |>
+  filter(Country_A_2 != Country_B_2)
+
+cdi_transformed <- ccode_dyad_ideals |>
+  rename( "Country_A" = ccode2 ,  "Country_B" = ccode1 )
+
+
+recomb_dyads_ideals_1 <- recombinant_dyads |>
+  left_join(cdi_transformed, by = c("Country_A_2" = "Country_A", "Country_B_2" = "Country_B")) 
+
+recomb_dyads_ideals_2 <- recomb_dyads_ideals_1|>
+  left_join(cdi_transformed, by = c("Country_A_2" = "Country_B", "Country_B_2" = "Country_A"), suffix = c("_1", "_2")) 
+
+recomb_dyads_ideals_3 <- recomb_dyads_ideals_2|>
+  transmute(
+    Country_A_2,
+    Country_B_2,
+    abs_diff_ideals_f = coalesce(abs_diff_ideals_1, abs_diff_ideals_2)
+  ) 
+recomb_dyads_ideals <- recomb_dyads_ideals_3|>
+  dplyr::select(Country_A_2, Country_B_2, abs_diff_ideals_f)
+
+```
+
+
+```{r}
+filtered_rec_dyad_ideals <- recomb_dyads_ideals |>
+  anti_join(recombinants, by = c("Country_A_2" = "Country_A", "Country_B_2" = "Country_B")) |>
+  anti_join(recombinants, by = c("Country_A_2" = "Country_B", "Country_B_2" = "Country_A"))
+
+fil_ren_rec_dyad_ideals <- filtered_rec_dyad_ideals |>
+  rename( "Country_A" = Country_A_2 ,  "Country_B" = Country_B_2, "abs_diff_ideals" = abs_diff_ideals_f) 
+
+```
+
+
+
+```{r}
+set.seed(42)
+par(mfrow = c(1, 1), mar = c(0.1, 0.1, 0.1, 0.1), oma = c(0.5, 0.5, 0.5, 0.5))
+
+dyad_ideal_raw <- bind_rows(recombinants, fil_ren_rec_dyad_ideals)
+
+dyads_F <- dyad_ideal_raw |> 
+  mutate(Country_A_name = countrycode(Country_A, origin = "iso3c", destination = "country.name")) |> 
+  mutate(Country_B_name = countrycode(Country_B, origin = "iso3c", destination = "country.name")) 
+
+dyads_E <- dyads_F |>
+  dplyr::select(Country_A_name, Country_B_name, abs_diff_ideals)
+
+dyads_EF <- na.omit(dyads_E)
+
+dyads_final <- dyads_EF |> group_by(Country_A_name, Country_B_name) |>
+  summarise(absdiff_ideals = mean(abs_diff_ideals)) |>
+  dplyr::select(Country_A_name, Country_B_name, absdiff_ideals)
+
+
+graph <- graph_from_data_frame(dyads_final, directed = FALSE)
+
+E(graph)$weight <- dyads_final$absdiff_ideals
+
+color_palette <- colorRampPalette(c("green", "red"))
+
+
+
+plot(
+  graph,
+  edge.width = 1 + 1 * (0.2 - scale(E(graph)$weight)),
+  edge.color = color_palette(length(unique(E(graph)$weight)))[rank(E(graph)$weight)],
+  vertex.size =5,
+  vertex.label = V(graph)$name,
+  layout = layout_with_lgl(graph),
+  vertex.label.dist = 1.2,
+  vertex.label.cex = 1,
+  vertex.label.degree = -2.7*pi/4,
+  vertex.label.color = "black",  
+  vertex.label.font = 2, 
+  vertex.label.size = 0.5
+)
+```
+
+
 
 
 
